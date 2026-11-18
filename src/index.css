@@ -3,8 +3,69 @@
 
 :root {
   --bg-gradient-top: #0a0b0e;
+  --bg-gradient-mid: #08090b;
   --bg-gradient-bottom: #060607;
   --bg-charcoal-vignette: rgba(0, 0, 0, 0.55);
+}
+
+/* ── Light theme ─────────────────────────────────────────────────────────────
+   The whole design is built on white-on-dark / black-on-white inversion, so
+   the light theme flips the two base colour variables and remaps the handful
+   of hard-coded dark surface hexes. Every `text-white`, `bg-white/x`,
+   `border-white/x`, `text-black`, `bg-black` utility resolves to these vars,
+   so the flip covers the app in one stroke. The default (no .light class)
+   state is the original dark theme. */
+html.light {
+  --bg-gradient-top: #eef2f7;
+  --bg-gradient-mid: #e9edf3;
+  --bg-gradient-bottom: #e4e9f0;
+  --bg-charcoal-vignette: rgba(15, 23, 42, 0.06);
+
+  /* Invert the two base colour variables (used by all white/black utilities). */
+  --color-white: #0f172a; /* "white" surfaces & text become dark ink          */
+  --color-black: #f8fafc; /* "black" surfaces & text become near-white        */
+
+  /* Dark brand/panel token used on the app root + section wrappers. */
+  --color-ipl-dark: #eef2f7;
+  --color-ipl-blue: #eef2f7;
+}
+
+/* Re-map hard-coded dark surface hexes for light mode. Tailwind emits these
+   arbitrary-value classes as escaped selectors; overriding them keeps the
+   dark palette's card/surface colours instead of leaving dark panels. */
+html.light .bg-\[\#0c0d10\],
+html.light .bg-\[\#0e1015\],
+html.light .bg-\[\#050505\],
+html.light .bg-\[\#0c0c0c\],
+html.light .bg-\[\#0a0d14\],
+html.light .bg-\[\#1a1a1a\] { background-color: #ffffff; }
+html.light .bg-\[\#000000\] { background-color: #eef2f7; }
+html.light .bg-\[\#111\] { background-color: #e2e8f0; }
+/* Opacity variants of the dark panel colour (used on modal/float surfaces). */
+html.light .bg-\[\#0c0d10\]\/80,
+html.light .bg-\[\#0c0d10\]\/90,
+html.light .bg-\[\#0c0d10\]\/95 { background-color: rgba(255, 255, 255, 0.92); }
+
+/* Off-white body text that would be unreadable on a light background. */
+html.light .text-\[\#E5E5E5\] { color: #334155; }
+
+/* Glass surfaces: turn the white-alpha veils into cool ink tints so cards,
+   headers and inputs stay visible on the light background. */
+html.light .glass {
+  background: rgba(15, 23, 42, 0.05);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+html.light .glass-premium {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.10);
+  box-shadow: 0 4px 24px -1px rgba(15, 23, 42, 0.08),
+    inset 0 0 20px 0 rgba(15, 23, 42, 0.02);
+}
+
+/* Primary CTA buttons are dark ink in light mode; keep their hover a shade of
+   ink rather than the original pale slate so they don't flash light. */
+html.light .hover\:bg-slate-200:hover {
+  background-color: #1e293b;
 }
 
 @theme {
@@ -63,6 +124,11 @@ body {
   overflow-x: clip;
   min-height: 100vh;
   min-height: 100dvh;
+}
+
+html.light body {
+  background-color: var(--bg-gradient-top);
+  color: var(--color-white, #0f172a);
 }
 
 /* Global Mobile Touch Responsiveness & Instant Tap Feedback */

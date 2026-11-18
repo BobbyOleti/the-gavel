@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker API for CrickAuction Directory & History
+ * Cloudflare Worker API for TheGavel Directory & History
  * Database: Cloudflare D1 (SQLite)
  */
 
@@ -9,8 +9,8 @@ function isAllowedOrigin(origin) {
     const { hostname } = new URL(origin);
     const host = hostname.toLowerCase();
     return (
-      host === 'crickauction.in' ||
-      host.endsWith('.crickauction.in') ||
+      host === 'thegavel.app' ||
+      host.endsWith('.thegavel.app') ||
       host === 'localhost' ||
       host === '127.0.0.1' ||
       host === '[::1]' ||
@@ -30,9 +30,9 @@ function isAllowedOrigin(origin) {
 function getCorsHeaders(origin) {
   const allowed = isAllowedOrigin(origin);
   return {
-    'Access-Control-Allow-Origin': allowed ? origin : 'https://crickauction.in',
+    'Access-Control-Allow-Origin': allowed ? origin : 'https://thegavel.app',
     'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-CrickAuction-Client',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-TheGavel-Client',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   };
@@ -96,7 +96,7 @@ function checkRateLimit(ip, category = 'read') {
 export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || request.headers.get('Referer') || '';
-    const clientHeader = request.headers.get('X-CrickAuction-Client');
+    const clientHeader = request.headers.get('X-TheGavel-Client');
 
     const json = (data, status = 200, extraHeaders = {}) => {
       return new Response(JSON.stringify(data), {
@@ -126,7 +126,7 @@ export default {
 
     // Health check endpoint
     if (request.method === 'GET' && (path === '' || path === '/api' || path === '/health')) {
-      return json({ status: 'ok', service: 'crickauction-api', timestamp: Date.now() }, 200, {}, origin);
+      return json({ status: 'ok', service: 'the-gavel-api', timestamp: Date.now() }, 200, {}, origin);
     }
 
     // --- Security Checks ---
@@ -144,7 +144,7 @@ export default {
 
     // 2. Mutating Operations Protection: Require allowed origin or verified client header
     if (['POST', 'PATCH', 'DELETE'].includes(request.method)) {
-      const isAllowed = isAllowedOrigin(origin) || clientHeader === 'crickauction-web';
+      const isAllowed = isAllowedOrigin(origin) || clientHeader === 'the-gavel-web';
       if (!isAllowed) {
         return new Response(JSON.stringify({ error: 'Unauthorized request source' }), {
           status: 403,

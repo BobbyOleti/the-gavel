@@ -7,9 +7,9 @@ import { simulateBotLot, simulateRemainingAuction } from './botSimulation.js';
 
 export const SCHEMA_VERSION = 1;
 export const MAX_SOLO_SAVES = 5;
-export const STORAGE_PREFIX = 'crickauction_solo_';
-export const STORAGE_INDEX_KEY = 'crickauction_solo_index';
-export const STORAGE_LOCK_PREFIX = 'crickauction_solo_lock_';
+export const STORAGE_PREFIX = 'thegavel_solo_';
+export const STORAGE_INDEX_KEY = 'thegavel_solo_index';
+export const STORAGE_LOCK_PREFIX = 'thegavel_solo_lock_';
 
 /**
  * Unified detector for local-mode solo auction rooms.
@@ -955,7 +955,7 @@ export async function acquireSoloRoomLock(roomId, tabId = Math.random().toString
   let channel = null;
   if (typeof BroadcastChannel !== 'undefined') {
     try {
-      channel = new BroadcastChannel(`crickauction_solo_tab_${roomId}`);
+      channel = new BroadcastChannel(`thegavel_solo_tab_${roomId}`);
       channel.onmessage = (e) => {
         if (e.data?.type === 'takeover' && e.data?.tabId !== tabId) {
           if (onSteal) onSteal();
@@ -977,7 +977,7 @@ export async function acquireSoloRoomLock(roomId, tabId = Math.random().toString
   if (typeof navigator !== 'undefined' && navigator.locks?.request) {
     try {
       let releaseLock = null;
-      const lockName = `crickauction_lock_${roomId}`;
+      const lockName = `thegavel_lock_${roomId}`;
 
       return await new Promise((resolve) => {
         navigator.locks.request(lockName, { ifAvailable: true }, async (lock) => {
@@ -987,13 +987,13 @@ export async function acquireSoloRoomLock(roomId, tabId = Math.random().toString
               acquired: false,
               steal: async () => {
                 try {
-                  const ch = new BroadcastChannel(`crickauction_solo_tab_${roomId}`);
+                  const ch = new BroadcastChannel(`thegavel_solo_tab_${roomId}`);
                   ch.postMessage({ type: 'takeover', tabId });
                   ch.close();
                 } catch {}
                 return await new Promise((resSteal) => {
                   navigator.locks.request(lockName, { steal: true }, async (stolenLock) => {
-                    const stolenCh = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(`crickauction_solo_tab_${roomId}`) : null;
+                    const stolenCh = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(`thegavel_solo_tab_${roomId}`) : null;
                     if (stolenCh && onSteal) {
                       stolenCh.onmessage = (e) => {
                         if (e.data?.type === 'takeover' && e.data?.tabId !== tabId) onSteal();
@@ -1065,7 +1065,7 @@ export async function acquireSoloRoomLock(roomId, tabId = Math.random().toString
           acquired: false,
           steal: async () => {
             try {
-              const ch = new BroadcastChannel(`crickauction_solo_tab_${roomId}`);
+              const ch = new BroadcastChannel(`thegavel_solo_tab_${roomId}`);
               ch.postMessage({ type: 'takeover', tabId });
               ch.close();
             } catch {}

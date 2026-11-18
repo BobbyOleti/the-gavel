@@ -146,7 +146,7 @@ const PageBackground = ({ showArt = true }) => {
         className="fixed inset-0 pointer-events-none -z-20"
         style={{
           background:
-            'linear-gradient(to bottom, var(--bg-gradient-top, #0a0b0e) 0%, #08090b 45%, var(--bg-gradient-bottom, #060607) 100%)',
+            'linear-gradient(to bottom, var(--bg-gradient-top, #0a0b0e) 0%, var(--bg-gradient-mid, #08090b) 45%, var(--bg-gradient-bottom, #060607) 100%)',
         }}
       />
 

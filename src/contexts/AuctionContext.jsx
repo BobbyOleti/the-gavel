@@ -199,11 +199,11 @@ export const AuctionProvider = ({ children }) => {
       return;
     }
 
-    const prevRoom = localStorage.getItem('crickauction_active_hosted_room');
+    const prevRoom = localStorage.getItem('thegavel_active_hosted_room');
     if (prevRoom && prevRoom !== roomId) {
       updateAuctionRecord(prevRoom, { status: 'cancelled', host_online: 0 }).catch(() => {});
     }
-    localStorage.setItem('crickauction_active_hosted_room', roomId);
+    localStorage.setItem('thegavel_active_hosted_room', roomId);
 
     const requestedServer = normalizeServer(server);
 
@@ -2228,7 +2228,7 @@ export const AuctionProvider = ({ children }) => {
         if (currentRoomData.status === 'waiting') {
           if (currentRoomData.isPublic) syncHostOnline(false);
           updateAuctionRecord(auctionId, { status: 'cancelled', host_online: 0 }).catch(() => {});
-          try { localStorage.removeItem('crickauction_active_hosted_room'); } catch {}
+          try { localStorage.removeItem('thegavel_active_hosted_room'); } catch {}
         }
         if (currentRoomData.status === 'active') {
           void pauseLiveLot(roomRtdb, auctionId, getSyncedTime());

@@ -35,3 +35,4 @@ scripts/
 # Agent tooling
 .agents/
 AGENTS.md
+.claude/settings.local.json

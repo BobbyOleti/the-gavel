@@ -1,4 +1,4 @@
--- Cloudflare D1 SQLite Schema for CrickAuction
+-- Cloudflare D1 SQLite Schema for TheGavel
 -- Replaces Supabase PostgreSQL tables: auctions, teams
 
 CREATE TABLE IF NOT EXISTS auctions (

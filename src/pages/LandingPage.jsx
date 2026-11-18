@@ -31,6 +31,7 @@ import {
   withServerParam,
 } from "../lib/auctionServers";
 import { localAuctionReducer, saveLocalSoloRoom, listLocalSoloRooms, deleteLocalSoloRoom } from "../lib/localAuctionEngine";
+import { FEATURE_MULTIPLAYER } from "../lib/appConfig";
 import { IPL_PLAYERS } from "../data/players";
 import { TEAMS } from "../data/teams";
 import {
@@ -155,14 +156,14 @@ const isSessionLocal = (session) =>
 
 const LandingPage = () => {
   useDocumentTitle(
-    "CrickAuction - Multiplayer T20 Auction Simulator | Fan-Made Cricket Game",
+    "TheGavel - Multiplayer T20 Auction Simulator | Fan-Made Cricket Game",
     "An independent, fan-made multiplayer T20 cricket auction simulator. Host tactical auctions with friends, manage squad budgets, and draft your dream T20 squad.",
   );
 
   const [selectedTeam, setSelectedTeam] = useState("MI");
   const [activeTab, setActiveTab] = useState("new");
-  const [auctionType, setAuctionType] = useState("mega"); 
-  const [playSolo, setPlaySolo] = useState(false);
+  const [auctionType, setAuctionType] = useState("mega");
+  const [playSolo, setPlaySolo] = useState(!FEATURE_MULTIPLAYER);
   const [isPublicRoom, setIsPublicRoom] = useState(true);
   const [roomCode, setRoomCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -248,7 +249,7 @@ const LandingPage = () => {
 
   useEffect(() => {
     const checkCooldown = () => {
-      const cooldownUntil = parseInt(localStorage.getItem('crickauction_room_cooldown_until') || '0', 10);
+      const cooldownUntil = parseInt(localStorage.getItem('thegavel_room_cooldown_until') || '0', 10);
       const rem = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
       setCooldownRemaining(rem);
     };
@@ -564,7 +565,7 @@ const LandingPage = () => {
 
       if (activeTab === "new") {
         if (!playSolo) {
-          const cooldownUntil = parseInt(localStorage.getItem('crickauction_room_cooldown_until') || '0', 10);
+          const cooldownUntil = parseInt(localStorage.getItem('thegavel_room_cooldown_until') || '0', 10);
           const remainingSeconds = Math.ceil((cooldownUntil - Date.now()) / 1000);
           if (remainingSeconds > 0) {
             setError(`Please wait ${remainingSeconds}s before creating another auction room.`);
@@ -609,7 +610,7 @@ const LandingPage = () => {
         const actualServer = result?.server || selectedServer;
         setSelectedServer(actualServer);
         if (!playSolo) {
-          localStorage.setItem('crickauction_room_cooldown_until', String(Date.now() + 30000));
+          localStorage.setItem('thegavel_room_cooldown_until', String(Date.now() + 30000));
         }
         if (result?.fellBack) {
           setNotice(
@@ -658,7 +659,7 @@ const LandingPage = () => {
 
         <div className="text-center mb-3 sm:mb-4 z-10 relative max-w-2xl px-2 sm:px-4 mt-1 sm:mt-2">
           <h1 className="sr-only">
-            CrickAuction - Fan-Made Multiplayer T20 Cricket Auction Simulator
+            TheGavel - Fan-Made Multiplayer T20 Cricket Auction Simulator
           </h1>
 
           <div className="text-[clamp(1.25rem,2.8vw,2.35rem)] font-pixel leading-none text-balance bg-clip-text text-transparent bg-gradient-to-b from-white via-white/90 to-white/60">
@@ -710,6 +711,7 @@ const LandingPage = () => {
 
               {!isGuestMode ? (
                 <div className="w-full space-y-4">
+                  {FEATURE_MULTIPLAYER && (
                   <button
                     onClick={handleGoogleSignIn}
                     className="w-full h-12 sm:h-14 relative overflow-hidden group/submit rounded-xl bg-white hover:bg-slate-200 text-black shadow-[0_10px_30px_rgba(255,255,255,0.08)] cursor-pointer transition-all active:scale-[0.98]"
@@ -729,22 +731,27 @@ const LandingPage = () => {
                       <span>Continue with Google</span>
                     </div>
                   </button>
+                  )}
 
-                  <div className="relative py-2 flex items-center justify-center">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-white/5" />
-                    </div>
-                    <span className="relative bg-[#0c0d10] px-4 text-[9px] font-black text-gray-400 uppercase tracking-widest italic">
-                      Wait, I'm a guest
-                    </span>
-                  </div>
+                  {FEATURE_MULTIPLAYER && (
+                    <>
+                      <div className="relative py-2 flex items-center justify-center">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-white/5" />
+                        </div>
+                        <span className="relative bg-[#0c0d10] px-4 text-[9px] font-black text-gray-400 uppercase tracking-widest italic">
+                          Wait, I'm a guest
+                        </span>
+                      </div>
 
-                  <button
-                    onClick={() => setIsGuestMode(true)}
-                    className="w-full h-14 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center gap-3 text-gray-400 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all font-black uppercase tracking-[0.2rem] text-xs cursor-pointer active:scale-[0.98]"
-                  >
-                    <Users size={18} /> Join as Guest
-                  </button>
+                      <button
+                        onClick={() => setIsGuestMode(true)}
+                        className="w-full h-14 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center gap-3 text-gray-400 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all font-black uppercase tracking-[0.2rem] text-xs cursor-pointer active:scale-[0.98]"
+                      >
+                        <Users size={18} /> Join as Guest
+                      </button>
+                    </>
+                  )}
                 </div>
               ) : (
                 <form onSubmit={handleGuestSignIn} className="w-full space-y-4">
@@ -782,13 +789,15 @@ const LandingPage = () => {
                     </div>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsGuestMode(false)}
-                    className="w-full text-[9px] font-black text-gray-400 hover:text-white uppercase tracking-[0.3em] transition-colors mt-2"
-                  >
-                    ← Back to Google Login
-                  </button>
+                  {FEATURE_MULTIPLAYER && (
+                    <button
+                      type="button"
+                      onClick={() => setIsGuestMode(false)}
+                      className="w-full text-[9px] font-black text-gray-400 hover:text-white uppercase tracking-[0.3em] transition-colors mt-2"
+                    >
+                      ← Back to Google Login
+                    </button>
+                  )}
                 </form>
               )}
 
@@ -823,7 +832,7 @@ const LandingPage = () => {
       {/* Hero */}
       <div className="text-center mb-3 sm:mb-4 z-10 relative max-w-2xl px-2 sm:px-4 mt-1 sm:mt-2">
         <h1 className="sr-only">
-          CrickAuction - Fan-Made Multiplayer T20 Cricket Auction Simulator
+          TheGavel - Fan-Made Multiplayer T20 Cricket Auction Simulator
         </h1>
 
         <div className="text-[clamp(1.25rem,2.8vw,2.35rem)] font-pixel leading-none text-balance bg-clip-text text-transparent bg-gradient-to-b from-white via-white/90 to-white/60">
@@ -864,7 +873,7 @@ const LandingPage = () => {
 
           {/* Right Side: Create/Join/History form */}
           <div className="lg:col-span-7 w-full p-4 sm:p-6 md:p-8 flex flex-col">
-            {availableServers.length > 1 && !(activeTab === "new" && playSolo) && (
+            {FEATURE_MULTIPLAYER && availableServers.length > 1 && !(activeTab === "new" && playSolo) && (
               <div className="flex items-center justify-between gap-3 mb-4 sm:mb-6">
                 <div className="min-w-0">
                   <span className="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest block">
@@ -897,6 +906,7 @@ const LandingPage = () => {
                 >
                   Create
                 </button>
+                {FEATURE_MULTIPLAYER && (
                 <button
                   type="button"
                   onClick={() => setActiveTab("join")}
@@ -917,6 +927,7 @@ const LandingPage = () => {
                     {serverRoomsCount}
                   </span>
                 </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setActiveTab("history")}
@@ -1180,7 +1191,8 @@ const LandingPage = () => {
                   </div>
                 </div>
 
-                {/* Solo vs AI bots Toggle */}
+                {/* Solo vs AI bots Toggle (only relevant when multiplayer is available) */}
+                {FEATURE_MULTIPLAYER && (
                 <div className="p-3 sm:p-4 bg-white/[0.02] border border-white/5 rounded-xl sm:rounded-2xl flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="text-[10px] sm:text-[11px] font-black uppercase text-white tracking-wider flex items-center gap-1.5">
@@ -1205,9 +1217,10 @@ const LandingPage = () => {
                     <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-slate-900 shadow-md" />
                   </button>
                 </div>
+                )}
 
                 {/* Public Lobby Directory Toggle (Cloud Rooms only) */}
-                {!playSolo && (
+                {FEATURE_MULTIPLAYER && !playSolo && (
                   <div className="p-3 sm:p-4 bg-white/[0.02] border border-white/5 rounded-xl sm:rounded-2xl flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <h2 className="text-[10px] sm:text-[11px] font-black uppercase text-white tracking-wider flex items-center gap-1.5">

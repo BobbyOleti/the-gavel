@@ -56,7 +56,7 @@ import {
 
 const AuctionRoom = () => {
    const { id } = useParams();
-   useDocumentTitle(`Auction Room #${id || ''} | CrickAuction`, 'Live multiplayer IPL Auction bidding arena.', true);
+   useDocumentTitle(`Auction Room #${id || ''} | TheGavel`, 'Live multiplayer IPL Auction bidding arena.', true);
    const navigate = useNavigate();
    const { server, ready: serverReady } = useRoomServer(id);
    const {
@@ -336,7 +336,7 @@ const AuctionRoom = () => {
    const loadSavedVoiceSettings = () => {
       if (typeof window === 'undefined') return null;
       try {
-         const raw = window.localStorage.getItem('crickauction_voice_settings');
+         const raw = window.localStorage.getItem('thegavel_voice_settings');
          return raw ? JSON.parse(raw) : null;
       } catch {
          return null;
@@ -365,7 +365,7 @@ const AuctionRoom = () => {
    useEffect(() => {
       if (typeof window === 'undefined') return;
       try {
-         window.localStorage.setItem('crickauction_voice_settings', JSON.stringify({
+         window.localStorage.setItem('thegavel_voice_settings', JSON.stringify({
             enabled: isTtsEnabled,
             speed: ttsSpeed,
             pitch: ttsPitch,

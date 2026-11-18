@@ -7,7 +7,7 @@ import Footer from '../components/Footer'
 
 export default function NotFound() {
   useDocumentTitle(
-    'Page Not Found (404) | CrickAuction',
+    'Page Not Found (404) | TheGavel',
     'The page you are looking for does not exist or has been moved.',
     true
   )

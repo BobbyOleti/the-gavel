@@ -79,7 +79,7 @@ test('simulateRemainingAuction: preserves human squad while drafting for bots', 
     playerId: IPL_PLAYERS[0].id,
     currentBid: 5.0,
     highBidderId: 'user_shaurya',
-    highBidderName: 'Shaurya',
+    highBidderName: 'Manager1',
     highBidderTeamId: 'CSK',
     status: 'bidding',
   };

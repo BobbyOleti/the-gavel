@@ -60,7 +60,7 @@ const useIsMobile = () => {
 
 const Lobby = () => {
   const { id } = useParams();
-  useDocumentTitle(`Lobby ${id ? `#${id}` : ''} | CrickAuction`, 'Live franchise team selection and auction hub.', true);
+  useDocumentTitle(`Lobby ${id ? `#${id}` : ''} | TheGavel`, 'Live franchise team selection and auction hub.', true);
   const { server, ready: serverReady } = useRoomServer(id);
   const { user, loginWithGoogle, loginAsGuest, loading: authLoading } = useAuth();
   const { joinAuction, currentAuction, loading: auctionLoading, messages, kickPlayer, updatePlayerTeam, startAuction, joinRoomDb, removeBotTeam, fillEmptyTeamsWithBots } = useAuction();
@@ -96,7 +96,7 @@ const Lobby = () => {
   const handleConfirmExitAndCancel = async () => {
     setShowExitConfirm(false);
     try {
-      localStorage.setItem('crickauction_room_cooldown_until', String(Date.now() + 30000));
+      localStorage.setItem('thegavel_room_cooldown_until', String(Date.now() + 30000));
       const rtdbInstance = getRtdb(server);
       await updateRtdb(ref(rtdbInstance, `auctions/${id}/room`), { status: 'cancelled' }).catch(() => {});
       await updateAuctionRecord(id, { status: 'cancelled', host_online: 0 }).catch(() => {});
