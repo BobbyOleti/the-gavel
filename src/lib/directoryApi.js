@@ -54,7 +54,7 @@ async function request(endpoint, options = {}) {
         ...(options.headers || {}),
       },
     });
-  } catch (netErr) {
+  } catch {
     const error = new Error('Network offline or directory service unavailable');
     error.status = 0;
     error.isNetwork = true;

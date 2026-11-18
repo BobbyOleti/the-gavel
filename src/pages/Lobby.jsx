@@ -32,8 +32,9 @@ import PageLoader from '../components/PageLoader';
 import PageBackground from '../components/PageBackground';
 import useRoomServer from '../hooks/useRoomServer';
 import { SERVER_LOCAL, withServerParam } from '../lib/auctionServers';
+import { FEATURE_MULTIPLAYER } from '../lib/appConfig';
 import useDocumentTitle from '../hooks/useDocumentTitle';
-import { ref, set, update as updateRtdb } from 'firebase/database';
+import { ref, update as updateRtdb } from 'firebase/database';
 import { getRtdb } from '../lib/firebase';
 import { isSoloBotRoom } from '../lib/botSimulation';
 import { convertLobbyToSolo } from '../lib/lobbyConversion';
@@ -72,7 +73,8 @@ const Lobby = () => {
   const [isSelectingTeam, setIsSelectingTeam] = useState(null);
   const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
   const [guestName, setGuestName] = useState('');
-  const [isGuestMode, setIsGuestMode] = useState(false);
+  // Solo (zero-backend) deploys have no Google sign-in; guest is the only way in.
+  const [isGuestMode, setIsGuestMode] = useState(!FEATURE_MULTIPLAYER);
   const [banError, setBanError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [showBotInfo, setShowBotInfo] = useState(false);
@@ -403,6 +405,7 @@ const Lobby = () => {
 
             {!isGuestMode ? (
               <div className="w-full space-y-3.5">
+                {FEATURE_MULTIPLAYER && (
                 <button
                   onClick={handleGoogleSignIn}
                   disabled={isUpdatingSettings}
@@ -420,6 +423,7 @@ const Lobby = () => {
                     </>
                   )}
                 </button>
+                )}
 
                 <div className="relative py-2 flex items-center justify-center">
                   <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5" /></div>
@@ -455,6 +459,7 @@ const Lobby = () => {
                   {isUpdatingSettings ? <Loader2 size={18} className="animate-spin text-black" /> : <span>Step into Hub</span>}
                 </button>
 
+                {FEATURE_MULTIPLAYER && (
                 <button
                   type="button"
                   onClick={() => setIsGuestMode(false)}
@@ -462,6 +467,7 @@ const Lobby = () => {
                 >
                   ← Use Google Account
                 </button>
+                )}
               </form>
             )}
           </div>

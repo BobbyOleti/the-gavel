@@ -28,7 +28,10 @@ import {
    Eye,
    FastForward,
    SkipForward,
-   Loader2
+   Loader2,
+   Check,
+   RotateCcw,
+   ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -74,13 +77,14 @@ const AuctionRoom = () => {
       messages,
       updateRoomSettings,
       kickPlayer,
-      passCurrentLot,
       votePassLot,
-      skipCurrentPlayerSolo,
       fastForwardAuctionSolo,
       getSyncedTime,
       soloLockStatus,
-      takeOverSoloAuction
+      takeOverSoloAuction,
+      confirmConsent,
+      forceConsentAdvance,
+      reopenSoldLot
    } = useAuction();
    const { user } = useAuth();
    const [error, setError] = useState('');
@@ -94,6 +98,8 @@ const AuctionRoom = () => {
    const [showParticipantsOverlay, setShowParticipantsOverlay] = useState(false);
    const [showEndConfirm, setShowEndConfirm] = useState(false);
    const [isEnding, setIsEnding] = useState(false);
+   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
+   const [isConsentBusy, setIsConsentBusy] = useState(false);
    const [sidebarTab, setSidebarTab] = useState('activity'); // activity or chat
    const celebrationAudioRef = useRef(null);
    const fallbackAudioRef = useRef(null);
@@ -218,8 +224,80 @@ const AuctionRoom = () => {
       }
    };
 
+   // ── Consent-after-sale gate ─────────────────────────────────────────────
+   // After a sold lot, every manager confirms the next player before it
+   // starts. The host can force-advance (no consent needed) or pull the just
+   // sold player back for a fresh re-bid (lag recovery). A 30s safety
+   // deadline auto-advances if the tally drags.
+   const isConsentGate = displayAuctionState?.status === 'awaiting_consent';
+
+   const consentHumans = useMemo(() => {
+      const players = currentAuction?.players || [];
+      // Bots never block consent (they auto-confirm in solo; in cloud they are
+      // not in the human tally), so only real managers count.
+      return players.filter(
+         (p) => p && !p.isBot && !String(p.id).startsWith('bot_') && (p.team || p.name),
+      );
+   }, [currentAuction?.players]);
+
+   const consentVotes = displayAuctionState?.consentVotes || {};
+   const consentConfirmed = consentHumans.filter((h) => consentVotes[h.id]).length;
+   const consentTotal = Math.max(1, consentHumans.length);
+   const iConsented = Boolean(user?.uid && consentVotes[user.uid]);
+
+   // 1s ticker for the consent-deadline countdown (only runs inside the gate).
+   const [consentTick, setConsentTick] = useState(0);
+   useEffect(() => {
+      if (!isConsentGate) return undefined;
+      setConsentTick(Date.now());
+      const t = setInterval(() => setConsentTick(Date.now()), 1000);
+      return () => clearInterval(t);
+   }, [isConsentGate, displayAuctionState?.playerId]);
+   void consentTick;
+
+   const consentRemainingSec = Math.max(
+      0,
+      Math.ceil(((displayAuctionState?.consentDeadline || 0) - getSyncedTime()) / 1000),
+   );
+
+   const handleConfirmConsent = async () => {
+      if (isConsentBusy || !isConsentGate || iConsented) return;
+      setIsConsentBusy(true);
+      try {
+         await confirmConsent(id);
+      } catch (err) {
+         console.warn('[consent] confirm failed', err);
+      } finally {
+         setTimeout(() => setIsConsentBusy(false), 400);
+      }
+   };
+
+   const handleForceAdvance = async () => {
+      if (isConsentBusy || !isConsentGate || !isAdmin) return;
+      setIsConsentBusy(true);
+      try {
+         await forceConsentAdvance(id);
+      } catch (err) {
+         console.warn('[consent] force advance failed', err);
+      } finally {
+         setTimeout(() => setIsConsentBusy(false), 400);
+      }
+   };
+
+   const handleReopenLot = async () => {
+      if (isConsentBusy || !isConsentGate) return;
+      setShowReopenConfirm(false);
+      setIsConsentBusy(true);
+      try {
+         await reopenSoldLot(id);
+      } catch (err) {
+         console.warn('[consent] reopen failed', err);
+      } finally {
+         setTimeout(() => setIsConsentBusy(false), 400);
+      }
+   };
+
    const configuredBidTimer = toFiniteNumber(currentAuction?.settings?.bidTimer, 10);
-   const isTimerPaused = displayAuctionState?.status === 'paused';
 
    // Real-time team ratings calculated entirely in browser memory (0 DB / infra cost)
    const liveTeamRatings = useMemo(() => {
@@ -783,7 +861,7 @@ const AuctionRoom = () => {
                scalar: 1.1,
                disableForReducedMotion: true
             });
-            const t1 = setTimeout(() => {
+            setTimeout(() => {
                confetti({
                   particleCount: 35,
                   angle: 60,
@@ -1375,7 +1453,113 @@ const AuctionRoom = () => {
                <main className="flex-1 min-h-0 overflow-y-auto p-4 md:p-8 compact:p-4 pb-28 sm:pb-12 md:pb-8 flex flex-col items-center custom-scrollbar touch-pan-y">
                   <div className="w-full max-w-4xl flex flex-col gap-4 md:gap-6">
                      <AnimatePresence mode="wait">
-                        {(displayAuctionState?.status === 'sold' || displayAuctionState?.status === 'unsold') ? (() => {
+                        {displayAuctionState?.status === 'awaiting_consent' ? (() => {
+                            const buyerTeam = TEAMS.find(t => t.id === displayAuctionState.highBidderTeamId);
+                            const allConfirmed = consentConfirmed >= consentTotal;
+                            return (
+                               <motion.div
+                                  key="consent"
+                                  initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                                  exit={{ opacity: 0, scale: 0.98, y: -8 }}
+                                  transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                                  className="w-full max-w-sm sm:max-w-md mx-auto will-change-transform"
+                               >
+                                  <div className="relative w-full rounded-[2rem] overflow-hidden bg-[#0c0d10] border border-white/10 shadow-[0_24px_70px_rgba(0,0,0,0.8)]">
+                                     {/* Warm floodlight ambient glow behind the gate */}
+                                     <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-ipl-gold/20 via-transparent to-transparent opacity-60" />
+                                     <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.12)_1px,transparent_1px)] [background-size:12px_12px] opacity-10 pointer-events-none" />
+
+                                     <div className="relative p-5 sm:p-6 compact:p-4 flex flex-col gap-4 z-10">
+                                        {/* Result summary row */}
+                                        <div className="flex items-center gap-3">
+                                           <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white/10 border border-white/15 overflow-hidden shrink-0">
+                                              <img
+                                                 src={currentPlayer?.image}
+                                                 alt=""
+                                                 className="w-full h-full object-cover"
+                                                 onError={(e) => {
+                                                    e.currentTarget.onerror = null;
+                                                    e.currentTarget.src = getPlayerAvatar(currentPlayer?.name);
+                                                 }}
+                                              />
+                                           </div>
+                                           <div className="min-w-0 flex-1">
+                                              <p className="text-[8px] font-pixel text-ipl-gold uppercase tracking-[0.25em]">Sold — awaiting consent</p>
+                                              <p className="text-base sm:text-lg font-black text-white truncate">{currentPlayer?.name}</p>
+                                           </div>
+                                           <div className="text-right shrink-0">
+                                              <p className="text-[9px] text-gray-400 uppercase font-bold">to {buyerTeam?.name || displayAuctionState.highBidderName || '—'}</p>
+                                              <p className="text-lg font-black text-ipl-gold">₹{formatCrores(displayAuctionState?.currentBid)} Cr</p>
+                                           </div>
+                                        </div>
+
+                                        {/* Consent tally */}
+                                        <div>
+                                           <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">
+                                              <span className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-emerald-400" /> Managers confirmed</span>
+                                              <span className="font-pixel text-white">{consentConfirmed}/{consentTotal}</span>
+                                           </div>
+                                           <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+                                              <div
+                                                 className="h-full bg-emerald-500/70 rounded-full transition-all duration-300"
+                                                 style={{ width: `${Math.min(100, (consentConfirmed / Math.max(1, consentTotal)) * 100)}%` }}
+                                              />
+                                           </div>
+                                           <p className="text-[10px] text-gray-500 mt-1.5">
+                                              Auto-advances in <span className="font-pixel text-amber-400">{consentRemainingSec}s</span> if everyone doesn’t confirm
+                                           </p>
+                                        </div>
+
+                                        {/* Every manager: confirm the next player */}
+                                        <button
+                                           type="button"
+                                           onClick={handleConfirmConsent}
+                                           disabled={iConsented || isConsentBusy}
+                                           className={`h-12 w-full rounded-2xl font-pixel text-[11px] sm:text-xs tracking-widest flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer ${
+                                              iConsented
+                                                 ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                                                 : 'bg-white text-black hover:bg-slate-200 shadow-[0_10px_30px_rgba(255,255,255,0.08)]'
+                                           }`}
+                                        >
+                                           {iConsented ? (
+                                              <><Check size={15} /> You confirmed</>
+                                           ) : isConsentBusy ? (
+                                              <Loader2 size={15} className="animate-spin" />
+                                           ) : (
+                                              <><ShieldCheck size={15} /> Confirm &amp; continue</>
+                                           )}
+                                        </button>
+
+                                        {/* Host overrides */}
+                                        {isAdmin && (
+                                           <div className="flex gap-2">
+                                              <button
+                                                 type="button"
+                                                 onClick={handleForceAdvance}
+                                                 disabled={allConfirmed || isConsentBusy}
+                                                 className="flex-1 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-pixel uppercase tracking-widest hover:bg-amber-500/25 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
+                                                 title="Host: skip the consent wait and move to the next player"
+                                              >
+                                                 <SkipForward size={13} /> Move on now
+                                              </button>
+                                              <button
+                                                 type="button"
+                                                 onClick={() => setShowReopenConfirm(true)}
+                                                 disabled={isConsentBusy}
+                                                 className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[10px] font-pixel uppercase tracking-widest hover:bg-white/10 hover:text-white disabled:opacity-40 transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
+                                                 title="Host: pull this player back and re-bid fresh (lag recovery)"
+                                              >
+                                                 <RotateCcw size={13} /> Take back
+                                              </button>
+                                           </div>
+                                        )}
+                                     </div>
+                                  </div>
+                               </motion.div>
+                            );
+                         })() : (
+                        (displayAuctionState?.status === 'sold' || displayAuctionState?.status === 'unsold') ? (() => {
                             const isSold = displayAuctionState.status === 'sold';
                             const buyerTeam = isSold ? TEAMS.find(t => t.id === displayAuctionState.highBidderTeamId) : null;
                             const slogan = isSold ? (TEAM_SLOGANS[buyerTeam?.id] || { slogan: 'IPL 2026!', hashtag: '#IPL' }) : null;
@@ -1717,8 +1901,9 @@ const AuctionRoom = () => {
                                     )}
 
                                     <div className="flex gap-2 sm:gap-3 md:gap-4">
-                                       {/* Pass / Next Lot Button (Every Human Manager during bidding; Host during celebration) */}
-                                       {!spectateMode && (displayAuctionState?.status === 'bidding' || isAdmin) && (
+                                       {/* Pass / Next Lot Button (Every Human Manager during bidding; Host during celebration).
+                                           Hidden while the consent gate is open — the gate panel is the control surface there. */}
+                                       {!spectateMode && displayAuctionState?.status !== 'awaiting_consent' && (displayAuctionState?.status === 'bidding' || isAdmin) && (
                                           <button
                                              type="button"
                                              onClick={handleSoloSkip}
@@ -1778,7 +1963,7 @@ const AuctionRoom = () => {
                                  </div>
                               </div>
                            </motion.div>
-                        )}
+                        ))}
                      </AnimatePresence>
 
                      {/* Arena Ad Slot (strictly visible on mobile screens only; minimizable & dismissible so gameplay is never blocked) */}
@@ -2385,6 +2570,18 @@ const AuctionRoom = () => {
                }
             }}
             onCancel={() => !isEnding && setShowEndConfirm(false)}
+         />
+
+         <ConfirmDialog
+            isOpen={showReopenConfirm}
+            title="Pull this player back?"
+            description={`${currentPlayer?.name || 'The player'} was just sold. Reopening lets any manager (including the one who missed the sale due to lag) re-enter the auction. The buyer's payment is refunded and the lot restarts bidding from ₹0.`}
+            detail={`Room ${id}`}
+            confirmLabel="Take back & re-bid"
+            cancelLabel="Keep the sale"
+            loading={isConsentBusy}
+            onConfirm={handleReopenLot}
+            onCancel={() => !isConsentBusy && setShowReopenConfirm(false)}
          />
       </div>
    );

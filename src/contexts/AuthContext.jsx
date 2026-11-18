@@ -60,16 +60,13 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Device-local mode: seed the session from localStorage up-front so the
+  // first render already has the right identity (no post-mount state set).
+  const [user, setUser] = useState(() => (isFirebaseConfigured ? null : restoreLocalUser()));
+  const [loading, setLoading] = useState(isFirebaseConfigured);
 
   useEffect(() => {
-    if (!isFirebaseConfigured) {
-      // Device-local mode: restore the saved manager profile, if any.
-      setUser(restoreLocalUser());
-      setLoading(false);
-      return undefined;
-    }
+    if (!isFirebaseConfigured) return undefined;
 
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);

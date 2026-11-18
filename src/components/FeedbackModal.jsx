@@ -61,7 +61,7 @@ const FeedbackModal = () => {
         createdAt: serverTimestamp(),
       });
       setSubmitted(true);
-    } catch (err) {
+    } catch {
       setError('Unable to send right now. Please try again later.');
     } finally {
       setIsSubmitting(false);

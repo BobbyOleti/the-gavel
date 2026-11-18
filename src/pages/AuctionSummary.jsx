@@ -60,7 +60,7 @@ const AuctionSummary = () => {
   const [dbTeams, setDbTeams] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState(null);
-  const [summaryReloadKey, setSummaryReloadKey] = useState(0);
+  const [summaryReloadKey] = useState(0);
 
   const teamCardRefs = React.useRef({});
 
@@ -79,7 +79,7 @@ const AuctionSummary = () => {
             origin: { y: 0.8 },
             colors: ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#ffffff']
           });
-        } catch (_) {}
+        } catch { /* confetti unavailable or reduced-motion */ }
       }
 
       const width = 800;

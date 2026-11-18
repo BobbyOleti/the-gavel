@@ -2,71 +2,97 @@
 @import "tailwindcss";
 
 :root {
-  --bg-gradient-top: #0a0b0e;
-  --bg-gradient-mid: #08090b;
-  --bg-gradient-bottom: #060607;
-  --bg-charcoal-vignette: rgba(0, 0, 0, 0.55);
+  /* IPL broadcast palette — deep stadium navy under warm floodlight gold.
+     Tints read as "premium sports", not generic black. */
+  --bg-gradient-top: #0a1130;
+  --bg-gradient-mid: #080d26;
+  --bg-gradient-bottom: #04060f;
+  --bg-charcoal-vignette: rgba(2, 4, 12, 0.62);
+
+  --accent-gold: #d4af37;
+  --accent-gold-soft: #f2cf6b;
+  --accent-orange: #ff5e1a;
+  --stadium-blue: #1b2f6b;
 }
 
-/* ── Light theme ─────────────────────────────────────────────────────────────
-   The whole design is built on white-on-dark / black-on-white inversion, so
-   the light theme flips the two base colour variables and remaps the handful
-   of hard-coded dark surface hexes. Every `text-white`, `bg-white/x`,
-   `border-white/x`, `text-black`, `bg-black` utility resolves to these vars,
-   so the flip covers the app in one stroke. The default (no .light class)
-   state is the original dark theme. */
+/* ── Light theme — "daytime stadium" ─────────────────────────────────────────
+   A coherent bright palette (sky + white + navy ink + warm gold), NOT a crude
+   dark→white inversion. Because the app is written in white-on-dark classes,
+   light mode is achieved by remapping the highest-impact utility classes and
+   the hard-coded dark surface hexes to their daylight equivalents. The default
+   (no .light class) state is the original night-stadium dark theme. */
+:root {
+  --ink: #0f172a;         /* primary text on light  */
+  --ink-soft: #475569;    /* secondary text on light */
+  --surface: #ffffff;     /* cards */
+  --surface-2: #f1f5fb;  /* elevated / nested */
+  --line: rgba(15, 23, 42, 0.12);
+}
+
 html.light {
-  --bg-gradient-top: #eef2f7;
-  --bg-gradient-mid: #e9edf3;
-  --bg-gradient-bottom: #e4e9f0;
-  --bg-charcoal-vignette: rgba(15, 23, 42, 0.06);
-
-  /* Invert the two base colour variables (used by all white/black utilities). */
-  --color-white: #0f172a; /* "white" surfaces & text become dark ink          */
-  --color-black: #f8fafc; /* "black" surfaces & text become near-white        */
-
-  /* Dark brand/panel token used on the app root + section wrappers. */
-  --color-ipl-dark: #eef2f7;
-  --color-ipl-blue: #eef2f7;
+  --bg-gradient-top: #eef3fb;
+  --bg-gradient-mid: #e7edf7;
+  --bg-gradient-bottom: #dbe3f0;
+  --bg-charcoal-vignette: rgba(30, 58, 138, 0.08);
+  --accent-gold: #b8860b;
+  --accent-gold-soft: #d4a017;
+  --accent-orange: #e2450a;
+  --stadium-blue: #dce6fb;
 }
 
-/* Re-map hard-coded dark surface hexes for light mode. Tailwind emits these
-   arbitrary-value classes as escaped selectors; overriding them keeps the
-   dark palette's card/surface colours instead of leaving dark panels. */
+/* Text: white → ink, and the common slate/gray shades → navy-tinted ink. */
+html.light .text-white,
+html.light .text-slate-100,
+html.light .text-slate-200,
+html.light .text-slate-300 { color: var(--ink); }
+html.light .text-slate-400,
+html.light .text-gray-300 { color: var(--ink-soft); }
+html.light .text-slate-500,
+html.light .text-gray-400,
+html.light .text-gray-500 { color: #64748b; }
+
+/* Surfaces: dark panels → daylight cards. Arbitrary hexes are escaped by
+   Tailwind, so override each one by its escaped class name. */
 html.light .bg-\[\#0c0d10\],
 html.light .bg-\[\#0e1015\],
 html.light .bg-\[\#050505\],
 html.light .bg-\[\#0c0c0c\],
 html.light .bg-\[\#0a0d14\],
-html.light .bg-\[\#1a1a1a\] { background-color: #ffffff; }
-html.light .bg-\[\#000000\] { background-color: #eef2f7; }
-html.light .bg-\[\#111\] { background-color: #e2e8f0; }
-/* Opacity variants of the dark panel colour (used on modal/float surfaces). */
+html.light .bg-\[\#1a1a1a\] { background-color: var(--surface); }
+html.light .bg-\[\#000000\] { background-color: var(--surface-2); }
+html.light .bg-\[\#111\] { background-color: var(--surface-2); }
 html.light .bg-\[\#0c0d10\]\/80,
 html.light .bg-\[\#0c0d10\]\/90,
-html.light .bg-\[\#0c0d10\]\/95 { background-color: rgba(255, 255, 255, 0.92); }
+html.light .bg-\[\#0c0d10\]\/95 { background-color: rgba(255, 255, 255, 0.94); }
 
-/* Off-white body text that would be unreadable on a light background. */
-html.light .text-\[\#E5E5E5\] { color: #334155; }
+/* Translucent white-utility surfaces: flip to subtle ink tints so they read
+   as light-grey on white cards instead of washing out. */
+html.light .bg-white\/5,
+html.light .bg-white\/10,
+html.light .bg-white\/\[0\.02\],
+html.light .bg-white\/\[0\.03\],
+html.light .bg-white\/\[0\.05\],
+html.light .bg-white\/\[0\.08\] { background-color: rgba(15, 23, 42, 0.05); }
+html.light .border-white\/5,
+html.light .border-white\/10,
+html.light .border-white\/15,
+html.light .border-white\/20 { border-color: var(--line); }
 
-/* Glass surfaces: turn the white-alpha veils into cool ink tints so cards,
-   headers and inputs stay visible on the light background. */
+/* Glass surfaces: white veils → cool daylight tints with a soft drop shadow. */
 html.light .glass {
-  background: rgba(15, 23, 42, 0.05);
-  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.85);
+  border-color: var(--line);
+  box-shadow: 0 6px 20px -6px rgba(15, 23, 42, 0.12);
 }
 html.light .glass-premium {
-  background: rgba(15, 23, 42, 0.04);
-  border-color: rgba(15, 23, 42, 0.10);
-  box-shadow: 0 4px 24px -1px rgba(15, 23, 42, 0.08),
-    inset 0 0 20px 0 rgba(15, 23, 42, 0.02);
+  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--line);
+  box-shadow: 0 10px 30px -8px rgba(15, 23, 42, 0.16);
 }
 
-/* Primary CTA buttons are dark ink in light mode; keep their hover a shade of
-   ink rather than the original pale slate so they don't flash light. */
-html.light .hover\:bg-slate-200:hover {
-  background-color: #1e293b;
-}
+/* Primary CTA: keep the dark-ink fill so it stays a strong call-to-action,
+   just hover to a slightly lighter ink. */
+html.light .hover\:bg-slate-200:hover { background-color: #334155; }
 
 @theme {
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system;

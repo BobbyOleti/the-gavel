@@ -54,6 +54,7 @@ import { useConnectionAlert } from './ConnectionAlertContext';
 import { shouldReportConnectionTrouble } from '../lib/connectionAlerts';
 import { pausedRemainingMs, toFiniteNumber } from '../lib/auctionDisplay';
 import {
+  CONSENT_DEADLINE_MS,
   countAuctionTeams,
   finalizedLotRecoveryDelay,
   generatePlayerOrder,
@@ -70,9 +71,14 @@ import {
 import {
   transactAdvance,
   transactBid,
+  transactConsentVote,
+  transactOpenConsent,
+  transactReopen,
   transactRoomPlayersSale,
+  transactRoomPlayersSaleRevert,
   transactSale,
   transactTeamSale,
+  transactTeamSaleRevert,
 } from '../lib/auctionTransactions';
 import { createServerSessionTracker } from '../lib/serverSessions';
 import {
@@ -176,7 +182,6 @@ export const AuctionProvider = ({ children }) => {
   const localSoloStateRef = React.useRef(null);
   const localSoloLockReleaseRef = React.useRef(null);
   const localSoloStealFnRef = React.useRef(null);
-  const localSoloTimerIntervalRef = React.useRef(null);
 
   // Server-authoritative time in cloud mode, Date.now() in device-local solo mode
   const getSyncedTime = useCallback(() => {
@@ -607,8 +612,14 @@ export const AuctionProvider = ({ children }) => {
   const endPlayerAuction = useCallback(async (roomId) => {
     if (isLocalRoom(roomId, currentAuction?.server)) {
       const live = currentAuction?.currentAuction || currentAuction?.currentLot;
+      if (live?.status === 'awaiting_consent') return; // gated; driven by consent loop
       if (live && (live.status === 'sold' || live.status === 'unsold')) {
-        updateLocalSoloState({ type: 'ADVANCE_LOT', now: Date.now() });
+        // Sold lots pause for manager consent before the next player; unsold
+        // ones advance straight away (no one is owed a decision).
+        updateLocalSoloState({
+          type: live.status === 'sold' ? 'OPEN_CONSENT' : 'ADVANCE_LOT',
+          now: Date.now(),
+        });
       } else {
         updateLocalSoloState({ type: 'RESOLVE_LOT', now: Date.now(), celebrate: true });
       }
@@ -724,6 +735,22 @@ export const AuctionProvider = ({ children }) => {
         if (orderSnap.exists()) playerOrder = orderSnap.val();
       }
 
+      // Consent-after-sale: after the sold-lot celebration, park the room in
+      // the consent gate instead of jumping straight to the next player.
+      // (Unsold lots still advance right away — no one is owed a decision.)
+      const openConsentGate = async () => {
+        try {
+          await runTransactionRtdb(liveRef, (currentLive) =>
+            transactOpenConsent(currentLive, {
+              currentPlayerId: targetPlayerId,
+              consentDeadline: getSyncedTime() + CONSENT_DEADLINE_MS,
+            }),
+          );
+        } finally {
+          endingPlayerRef.current = false;
+        }
+      };
+
       // ── Bug Fix 2: Always release endingPlayerRef via finally inside the timeout callback ──
       // Previously, component unmount before timeout fired left the ref stuck at true forever.
       const advanceToNextPlayer = async () => {
@@ -783,11 +810,53 @@ export const AuctionProvider = ({ children }) => {
         }
       };
 
-      setTimeout(advanceToNextPlayer, waitTime);
+      setTimeout(() => {
+        if (isSold) openConsentGate();
+        else advanceToNextPlayer();
+      }, waitTime);
     } catch (err) {
       console.error('[auction] endPlayerAuction failed', err);
       handleFirebaseError(err);
       endingPlayerRef.current = false;
+    }
+  }, [getSyncedTime, flushAuctionToFirestore]);
+
+  /**
+   * Shared cloud advance used by the consent gate (everyone consented, host
+   * force, or safety deadline). Idempotent: the transaction aborts if another
+   * client already advanced or the lot moved on.
+   */
+  const advanceCloudLot = useCallback(async (server, roomId, room, live) => {
+    const rtdbInstance = getRtdb(normalizeServer(server || getActiveServer()));
+    const liveRef = ref(rtdbInstance, `auctions/${roomId}/live`);
+    if ((room?.status || 'active') !== 'active') return;
+
+    const settings = room?.settings || {};
+    const order = room?.playerOrder || Array.from({ length: IPL_PLAYERS.length }, (_, i) => i);
+    const curIdx = order.findIndex((idx) => IPL_PLAYERS[idx] && IPL_PLAYERS[idx]?.id === live?.playerId);
+    const nextIdx = curIdx !== -1 ? order[curIdx + 1] : order[0];
+
+    if (nextIdx !== undefined && IPL_PLAYERS[nextIdx]) {
+      await runTransactionRtdb(liveRef, (currentLive) =>
+        transactAdvance(currentLive, {
+          currentPlayerId: live?.playerId,
+          nextPlayerId: IPL_PLAYERS[nextIdx].id,
+          timerEndsAt: getSyncedTime() + (settings?.bidTimer || 10) * 1000,
+        }),
+      );
+    } else {
+      // No next player: complete the room the same way the normal flow does.
+      await onDisconnect(ref(rtdbInstance, `auctions/${roomId}/live`)).cancel().catch(() => {});
+      await updateRtdb(ref(rtdbInstance, `auctions/${roomId}/room`), { status: 'completed' }).catch(() => {});
+      try {
+        await updateRtdb(ref(rtdbInstance, `auctions/${roomId}/live`), { status: 'completed' });
+      } catch {
+        await updateRtdb(ref(rtdbInstance, `auctions/${roomId}/live`), { status: 'paused' }).catch(() => {});
+      }
+      const persisted = await flushAuctionToFirestore(roomId, normalizeServer(server || getActiveServer()));
+      if (persisted) {
+        setTimeout(() => remove(ref(rtdbInstance, `auctions/${roomId}`)).catch(() => {}), 30000);
+      }
     }
   }, [getSyncedTime, flushAuctionToFirestore]);
 
@@ -1084,6 +1153,134 @@ export const AuctionProvider = ({ children }) => {
   const skipCurrentPlayerSolo = passCurrentLot;
 
   /**
+   * Consent-after-sale: every manager taps Confirm while the room is gated in
+   * `awaiting_consent`. When everyone has consented the next lot starts.
+   * - Solo: a CONSENT_VOTE to the local reducer (host + auto-voting bots).
+   * - Cloud: an RTDB vote; any client that sees the tally complete advances
+   *   the lot atomically, so the advance happens exactly once no matter who
+   *   was last to consent.
+   */
+  const confirmConsent = useCallback(async (roomId) => {
+    if (!roomId || !user?.uid) return;
+
+    if (isLocalRoom(roomId, currentAuction?.server)) {
+      updateLocalSoloState({ type: 'CONSENT_VOTE', voterId: user.uid, now: Date.now() });
+      return;
+    }
+
+    const server = normalizeServer(currentAuction?.server || getActiveServer());
+    const rtdbInstance = getRtdb(server);
+    const liveRef = ref(rtdbInstance, `auctions/${roomId}/live`);
+    const roomRef = ref(rtdbInstance, `auctions/${roomId}/room`);
+
+    try {
+      // Record my confirmation (idempotent — re-voting is a no-op).
+      await runTransactionRtdb(liveRef, (currentLive) =>
+        transactConsentVote(currentLive, { voterId: user.uid, now: getSyncedTime() }),
+      );
+
+      // Whoever notices the tally complete advances the lot; the advance
+      // transaction aborts if another client already moved on, so it is safe
+      // for all clients to race here.
+      const [liveSnap, roomSnap] = await Promise.all([get(liveRef), get(roomRef)]);
+      const live = liveSnap.val();
+      const room = roomSnap.exists() ? roomSnap.val() : {};
+      if (!live || live.status !== 'awaiting_consent') return;
+
+      const humans = (room?.players || []).filter(
+        (p) => p && p.team && !p.isBot && !String(p.id).startsWith('bot_'),
+      );
+      if (humans.length === 0) return;
+      const votes = live.consentVotes || {};
+      if (!humans.every((h) => votes[h.id])) return; // still waiting
+
+      await advanceCloudLot(server, roomId, room, live);
+    } catch (err) {
+      console.warn('[consent] Confirm/advance failed', err);
+    }
+  }, [user?.uid, currentAuction?.server, getSyncedTime, advanceCloudLot]);
+
+  /**
+   * Host override: skip the consent wait and advance immediately. Works in
+   * both solo and cloud, no consent tally required.
+   */
+  const forceConsentAdvance = useCallback(async (roomId) => {
+    if (!roomId) return;
+
+    if (isLocalRoom(roomId, currentAuction?.server)) {
+      updateLocalSoloState({ type: 'CONSENT_FORCE', now: Date.now() });
+      return;
+    }
+
+    const server = normalizeServer(currentAuction?.server || getActiveServer());
+    const rtdbInstance = getRtdb(server);
+    const liveRef = ref(rtdbInstance, `auctions/${roomId}/live`);
+    const roomRef = ref(rtdbInstance, `auctions/${roomId}/room`);
+
+    try {
+      const [liveSnap, roomSnap] = await Promise.all([get(liveRef), get(roomRef)]);
+      const live = liveSnap.val();
+      const room = roomSnap.exists() ? roomSnap.val() : {};
+      if (!live || live.status !== 'awaiting_consent') return;
+      await advanceCloudLot(server, roomId, room, live);
+    } catch (err) {
+      handleFirebaseError(err);
+    }
+  }, [currentAuction?.server, getSyncedTime, advanceCloudLot, handleFirebaseError]);
+
+  /**
+   * Host undo: pull the just-sold player back and reopen the lot for fresh
+   * bidding (price starts at 0, so it can rise again). Reverts the winner's
+   * squad/purse so no money is stranded.
+   */
+  const reopenSoldLot = useCallback(async (roomId) => {
+    if (!roomId) return;
+
+    if (isLocalRoom(roomId, currentAuction?.server)) {
+      updateLocalSoloState({ type: 'REOPEN_LOT', now: Date.now() });
+      return;
+    }
+
+    const server = normalizeServer(currentAuction?.server || getActiveServer());
+    const rtdbInstance = getRtdb(server);
+    const liveRef = ref(rtdbInstance, `auctions/${roomId}/live`);
+    const roomRef = ref(rtdbInstance, `auctions/${roomId}/room`);
+
+    try {
+      const [liveSnap, roomSnap] = await Promise.all([get(liveRef), get(roomRef)]);
+      const live = liveSnap.val();
+      const room = roomSnap.exists() ? roomSnap.val() : {};
+      if (!live) return;
+      if (live.status !== 'awaiting_consent' && live.status !== 'sold') return;
+
+      const initialBudget = toFiniteNumber(room.settings?.budget, 120.0);
+
+      // Reopen the lot atomically (only from sold/awaiting_consent, once).
+      const reopenResult = await runTransactionRtdb(liveRef, (currentLive) =>
+        transactReopen(currentLive, {
+          currentPlayerId: live.playerId,
+          timerEndsAt: getSyncedTime() + (room.settings?.bidTimer || 10) * 1000,
+        }),
+      );
+      if (!reopenResult.committed) return;
+
+      // Revert the winner's squad + purse so a lagging manager can re-enter.
+      if (live.highBidderId) {
+        const teamRef = ref(rtdbInstance, `auctions/${roomId}/teams/${roomId}_${live.highBidderId}`);
+        await runTransactionRtdb(teamRef, (currentTeam) =>
+          transactTeamSaleRevert(currentTeam, { playerId: live.playerId, initialBudget }),
+        );
+        await runTransactionRtdb(roomRef, (currentRoom) =>
+          transactRoomPlayersSaleRevert(currentRoom, { winnerId: live.highBidderId, bid: live.currentBid }),
+        );
+      }
+    } catch (err) {
+      console.error('[consent] reopenSoldLot failed', err);
+      handleFirebaseError(err);
+    }
+  }, [currentAuction?.server, getSyncedTime, handleFirebaseError]);
+
+  /**
    * Multiplayer consensus pass vote:
    * Records a user's pass vote. If all eligible non-leading human managers have agreed,
    * automatically triggers passCurrentLot.
@@ -1269,6 +1466,29 @@ export const AuctionProvider = ({ children }) => {
     attempt();
     return () => clearTimeout(timer);
   }, [currentAuction?.id, currentAuction?.server, liveLotStatus, endPlayerAuction]);
+
+  // Consent-gate safety net: a SOLD lot waits for manager consent before the
+  // next player. If the tally drags (lagging/offline manager), any client that
+  // sees the deadline pass advances the lot — the advance transaction is
+  // idempotent, so duplicate attempts are harmless. The deadline is stored in
+  // server time (getSyncedTime), so measure the remaining window against the
+  // same clock to keep it accurate across drifted local clocks.
+  useEffect(() => {
+    if (!currentAuction?.id) return undefined;
+    const live = currentAuction.currentAuction || currentAuction.currentLot;
+    if (!live || live.status !== 'awaiting_consent') return undefined;
+
+    const now = getSyncedTime();
+    const delay = Math.max(0, (live.consentDeadline || 0) - now) + 500;
+    const timer = setTimeout(async () => {
+      try {
+        await forceConsentAdvance(currentAuction.id);
+      } catch (err) {
+        console.warn('[consent] Safety auto-advance failed', err);
+      }
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [currentAuction?.id, currentAuction?.server, currentAuction?.currentAuction?.status, currentAuction?.currentAuction?.consentDeadline, forceConsentAdvance, getSyncedTime]);
 
   const joinRoomDb = useCallback(async (roomId, userId, playerDetails, serverHint) => {
     if (isLocalRoom(roomId, serverHint)) {
@@ -2845,6 +3065,9 @@ export const AuctionProvider = ({ children }) => {
     votePassLot,
     skipCurrentPlayerSolo,
     fastForwardAuctionSolo,
+    confirmConsent,
+    forceConsentAdvance,
+    reopenSoldLot,
     getSyncedTime,
     soloLockStatus,
     takeOverSoloAuction

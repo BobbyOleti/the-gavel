@@ -150,12 +150,34 @@ const PageBackground = ({ showArt = true }) => {
         }}
       />
 
-      {/* 2. Cool stadium light (neutral only, no warm tint) */}
+      {/* 2. Stadium floodlights: warm gold corner + cool blue corner +
+          faint pitch-green wash at the base — the IPL broadcast look. */}
       <div
         className="fixed inset-0 pointer-events-none -z-20"
         style={{
-          background:
-            'radial-gradient(ellipse 42% 35% at 84% 46%, rgba(56, 132, 255, 0.03) 0%, transparent 70%)',
+          background: [
+            'radial-gradient(ellipse 55% 40% at 88% 20%, rgba(212, 175, 55, 0.06) 0%, transparent 70%)',
+            'radial-gradient(ellipse 50% 42% at 12% 12%, rgba(56, 132, 255, 0.05) 0%, transparent 70%)',
+            'radial-gradient(ellipse 70% 24% at 50% 100%, rgba(38, 166, 92, 0.05) 0%, transparent 70%)',
+          ].join(', '),
+        }}
+      />
+
+      {/* 2.5. Faint stadium photograph — adds real "arena" depth.
+          Unsplash free image; heavily dimmed + gradient-masked so it never
+          competes with content and costs nothing to serve. */}
+      <div
+        className="fixed inset-0 pointer-events-none -z-20"
+        style={{
+          backgroundImage:
+            "url('https://images.unsplash.com/photo-1522869695456-5b2bbce45d6a?auto=format&fit=crop&w=1600&q=60')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center 30%',
+          opacity: 0.16,
+          maskImage:
+            'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.55) 40%, transparent 78%)',
+          WebkitMaskImage:
+            'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.55) 40%, transparent 78%)',
         }}
       />
 

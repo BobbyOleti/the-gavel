@@ -154,6 +154,14 @@ export function finalizedLotRecoveryDelay(status) {
 }
 
 /**
+ * Consent-after-sale safety window: after a SOLD lot, the room pauses here
+ * for every manager to confirm the next player. If consent drags, the room
+ * auto-advances so one offline manager can never freeze the auction.
+ * Shared by the local solo engine and the cloud (RTDB) flow.
+ */
+export const CONSENT_DEADLINE_MS = 30000;
+
+/**
  * Decision predicate for server-side host-disconnect auto-pause.
  * The server-side onDisconnect fallback must only be armed when:
  * 1. The client socket is actively connected.

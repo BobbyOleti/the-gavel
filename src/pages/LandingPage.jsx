@@ -22,7 +22,6 @@ import { ref, remove } from "firebase/database";
 import {
   DEFAULT_AUCTION_SERVER,
   SERVER_LOCAL,
-  getAuctionServer,
   getPreferredServer,
   getServerFromSearch,
   getServerMeta,
@@ -196,7 +195,7 @@ const LandingPage = () => {
   // Live Public Rooms state (Cloudflare D1 directory)
   const [publicRooms, setPublicRooms] = useState([]);
   const [publicRoomsLoading, setPublicRoomsLoading] = useState(false);
-  const [publicRoomsError, setPublicRoomsError] = useState(null);
+  const [, setPublicRoomsError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState("all");
 
@@ -243,7 +242,9 @@ const LandingPage = () => {
   const [expandedSession, setExpandedSession] = useState(null);
   const [sessionToDelete, setSessionToDelete] = useState(null);
 
-  const [isGuestMode, setIsGuestMode] = useState(false);
+  // Solo (zero-backend) deploys have no Google sign-in, so the guest name
+  // form is the front door and is shown immediately.
+  const [isGuestMode, setIsGuestMode] = useState(!FEATURE_MULTIPLAYER);
   const [guestName, setGuestName] = useState("");
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
 
@@ -279,27 +280,6 @@ const LandingPage = () => {
       );
     }
   }, []);
-
-  // Client-side cache for platform stats (5-minute TTL to eliminate egress)
-  const statsCacheRef = useRef({ data: null, timestamp: 0 });
-
-  const fetchAuctionStats = useCallback(async (force = false) => {
-    const now = Date.now();
-    if (!force && statsCacheRef.current.data && now - statsCacheRef.current.timestamp < 300000) {
-      setAuctionStats(statsCacheRef.current.data);
-      return;
-    }
-
-    try {
-      const stats = await fetchPlatformStats(force);
-      statsCacheRef.current = { data: stats, timestamp: Date.now() };
-      setAuctionStats(stats);
-    } catch {
-      // Best-effort stats - UI falls back to animated activity indicator
-    }
-  }, []);
-
-  // fetchAuctionStats is retained for manual refreshes; mount sync is handled by fetchPublicRoomsList
 
   // Fetch active public rooms & synced stats from Cloudflare D1
   const fetchPublicRoomsList = useCallback(async (force = false) => {
@@ -701,12 +681,14 @@ const LandingPage = () => {
             {/* Right Side: Welcome Login Form */}
             <div className="lg:col-span-5 w-full p-8 md:p-10 flex flex-col items-center justify-center">
               <h2 className="text-xl font-black uppercase tracking-tight mb-1">
-                {isGuestMode ? "Guest Access" : "Welcome, Manager"}
+                {FEATURE_MULTIPLAYER && !isGuestMode ? "Welcome, Manager" : "Start Solo Auction"}
               </h2>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-8">
-                {isGuestMode
-                  ? "Enter a name to join"
-                  : "Sign in to enter the auction hub"}
+                {FEATURE_MULTIPLAYER
+                  ? isGuestMode
+                    ? "Enter a name to join"
+                    : "Sign in to enter the auction hub"
+                  : "Runs 100% on your device - no account, no server"}
               </p>
 
               {!isGuestMode ? (
@@ -778,7 +760,7 @@ const LandingPage = () => {
                       {isSubmitting ? (
                         <Loader2 size={18} className="animate-spin" />
                       ) : (
-                        <span>Start Auction Hub</span>
+                        <span>{FEATURE_MULTIPLAYER ? "Start Auction Hub" : "Start Solo Auction"}</span>
                       )}
                       {!isSubmitting && (
                         <ChevronRight
